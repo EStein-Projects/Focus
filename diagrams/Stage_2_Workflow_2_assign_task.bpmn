@@ -1,0 +1,1083 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_WF2" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-js (https://demo.bpmn.io)" exporterVersion="18.13.2">
+  <bpmn:collaboration id="Collaboration_WF2">
+    <bpmn:participant id="Participant_Worker" name="Worker" processRef="Process_Worker" />
+    <bpmn:participant id="Participant_WorkerAPI" name="Worker API Handler" processRef="Process_WorkerAPI" />
+    <bpmn:participant id="Participant_WorkerDB" name="Worker Database" processRef="Process_WorkerDB" />
+    <bpmn:participant id="Participant_TaskAssign" name="Task Assignment Engine" processRef="Process_TaskAssign" />
+    <bpmn:participant id="Participant_DepGraph" name="Task Dependency Graph" processRef="Process_DepGraph" />
+    <bpmn:participant id="Participant_TaskDB" name="Task Database" processRef="Process_TaskDB" />
+    <bpmn:messageFlow id="MF_WorkerReq" name="New Task Request" sourceRef="Task_WorkerRequest" targetRef="Start_WorkerAPI" />
+    <bpmn:messageFlow id="MF_DeliverTask" name="Task Details" sourceRef="Task_DeliverTask" targetRef="Event_WorkerReceivesTask" />
+    <bpmn:messageFlow id="MF_ReturnAssignedExisting" name="Currently Assigned Task" sourceRef="Task_ReturnAssigned" targetRef="Event_WorkerReceivesTask" />
+    <bpmn:messageFlow id="MF_CheckState" name="Check Worker State" sourceRef="Task_CheckWorkerState" targetRef="Start_WorkerDB" />
+    <bpmn:messageFlow id="MF_ReturnState" name="Worker State" sourceRef="Task_ReturnWorkerState" targetRef="Event_ReceiveState" />
+    <bpmn:messageFlow id="MF_SetInProgress" name="Conditional Write: Set State to &#39;in progress&#39; WHERE state = &#39;open&#39;" sourceRef="Task_SetInProgress" targetRef="Event_SetStateReq" />
+    <bpmn:messageFlow id="MF_SetInProgressAck" name="State Change Result (success/failure)" sourceRef="Task_ReturnSetResult" targetRef="Event_ReceiveSetResult" />
+    <bpmn:messageFlow id="MF_CallEngine" name="Assign Task Request" sourceRef="Task_CallEngine" targetRef="Start_TaskAssign" />
+    <bpmn:messageFlow id="MF_QueryUnblocked" name="Query Unblocked Tasks" sourceRef="Task_QueryUnblocked" targetRef="Start_DepGraph" />
+    <bpmn:messageFlow id="MF_ReturnUnblocked" name="Unblocked Task List" sourceRef="Task_ReturnUnblocked" targetRef="Event_ReceiveUnblocked" />
+    <bpmn:messageFlow id="MF_ReadWorkerMeta" name="Read Worker Metadata" sourceRef="Task_ReadWorkerMeta" targetRef="Event_ReadWorkerMetaReq" />
+    <bpmn:messageFlow id="MF_ReturnWorkerMeta" name="Worker Metadata" sourceRef="Task_ReturnWorkerMeta" targetRef="Event_ReceiveWorkerMeta" />
+    <bpmn:messageFlow id="MF_AttemptAssign" name="Attempt to Assign Task" sourceRef="Task_AttemptAssign" targetRef="Start_TaskDB" />
+    <bpmn:messageFlow id="MF_AssignResult" name="Assignment Result" sourceRef="Task_ReturnAssignResult" targetRef="Event_ReceiveAssignResult" />
+    <bpmn:messageFlow id="MF_RecordAssignment" name="Conditional Write: Record Assignment WHERE state = &#39;in progress&#39;" sourceRef="Task_RecordAssignment" targetRef="Event_RecordAssignmentReq" />
+    <bpmn:messageFlow id="MF_RecordAssignmentResult" name="Record Result (success/failure)" sourceRef="Task_ReturnRecordResult" targetRef="Event_ReceiveRecordResult" />
+    <bpmn:messageFlow id="MF_ReturnTask" name="Assigned Task" sourceRef="Task_ReturnNewTask" targetRef="Event_ReceiveNewTask" />
+    <bpmn:messageFlow id="Flow_01zioow" sourceRef="Activity_1thh7ty" targetRef="Event_0skpvw5" />
+    <bpmn:messageFlow id="Flow_1clduui" sourceRef="Activity_1i817aj" targetRef="Event_0bm8tmy" />
+    <bpmn:textAnnotation id="TextAnnotation_1ceerfx">
+      <bpmn:text>Precheck Query</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_0y3jtlt" associationDirection="None" sourceRef="Flow_01zioow" targetRef="TextAnnotation_1ceerfx" />
+    <bpmn:textAnnotation id="TextAnnotation_0wbr8zo">
+      <bpmn:text>Query Result</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_0e0yk47" associationDirection="None" sourceRef="Flow_1clduui" targetRef="TextAnnotation_0wbr8zo" />
+    <bpmn:textAnnotation id="TextAnnotation_1fm1mph">
+      <bpmn:text>No</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_1pdspjk" associationDirection="None" sourceRef="Flow_1r88912" targetRef="TextAnnotation_1fm1mph" />
+    <bpmn:textAnnotation id="TextAnnotation_1v46e61">
+      <bpmn:text>Yes</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_1z08jxw" associationDirection="None" sourceRef="Flow_0xpen27" targetRef="TextAnnotation_1v46e61" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Worker" isExecutable="false">
+    <bpmn:startEvent id="Start_Worker" name="Worker ready for new task">
+      <bpmn:outgoing>Flow_W1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sendTask id="Task_WorkerRequest" name="Request new task from system">
+      <bpmn:incoming>Flow_W1</bpmn:incoming>
+      <bpmn:outgoing>Flow_W2</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_WorkerReceivesTask" name="Receive assigned task">
+      <bpmn:incoming>Flow_W2</bpmn:incoming>
+      <bpmn:outgoing>Flow_W3</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_W1" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="End_Worker" name="Worker begins task">
+      <bpmn:incoming>Flow_W3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_W1" sourceRef="Start_Worker" targetRef="Task_WorkerRequest" />
+    <bpmn:sequenceFlow id="Flow_W2" sourceRef="Task_WorkerRequest" targetRef="Event_WorkerReceivesTask" />
+    <bpmn:sequenceFlow id="Flow_W3" sourceRef="Event_WorkerReceivesTask" targetRef="End_Worker" />
+  </bpmn:process>
+  <bpmn:process id="Process_WorkerAPI" isExecutable="false">
+    <bpmn:startEvent id="Start_WorkerAPI" name="Receive new task request">
+      <bpmn:outgoing>Flow_API1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_API1" />
+    </bpmn:startEvent>
+    <bpmn:sendTask id="Task_CheckWorkerState" name="Check Worker&#39;s state in Worker Database">
+      <bpmn:incoming>Flow_API1</bpmn:incoming>
+      <bpmn:incoming>Flow_RetryCheck</bpmn:incoming>
+      <bpmn:outgoing>Flow_API2</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_ReceiveState" name="Receive Worker state">
+      <bpmn:incoming>Flow_API2</bpmn:incoming>
+      <bpmn:outgoing>Flow_API3</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_API2" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:exclusiveGateway id="Gateway_WorkerState" name="Worker&#39;s state?">
+      <bpmn:incoming>Flow_API3</bpmn:incoming>
+      <bpmn:outgoing>Flow_StateOpen</bpmn:outgoing>
+      <bpmn:outgoing>Flow_StateAssigned</bpmn:outgoing>
+      <bpmn:outgoing>Flow_StateInProgress</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateCatchEvent id="Event_WaitStateChange" name="Wait until state changes">
+      <bpmn:incoming>Flow_StateInProgress</bpmn:incoming>
+      <bpmn:outgoing>Flow_RetryCheck</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDef_1" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sendTask id="Task_ReturnAssigned" name="Return currently assigned task to Worker">
+      <bpmn:incoming>Flow_StateAssigned</bpmn:incoming>
+      <bpmn:outgoing>Flow_APIEnd_Assigned</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Task_SetInProgress" name="Conditional write: set Worker state to &#39;in progress&#39; WHERE state = &#39;open&#39;">
+      <bpmn:incoming>Flow_StateOpen</bpmn:incoming>
+      <bpmn:outgoing>Flow_API_WaitSetResult</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_ReceiveSetResult" name="Receive state change result">
+      <bpmn:incoming>Flow_API_WaitSetResult</bpmn:incoming>
+      <bpmn:outgoing>Flow_API_CheckSetResult</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_API_SetResult" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:exclusiveGateway id="Gateway_SetResultCheck" name="State change succeeded?">
+      <bpmn:incoming>Flow_API_CheckSetResult</bpmn:incoming>
+      <bpmn:outgoing>Flow_SetSuccess</bpmn:outgoing>
+      <bpmn:outgoing>Flow_SetFail</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="Task_CallEngine" name="Call Task Assignment Engine to assign new task">
+      <bpmn:incoming>Flow_SetSuccess</bpmn:incoming>
+      <bpmn:outgoing>Flow_API5</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_ReceiveNewTask" name="Receive newly assigned task">
+      <bpmn:incoming>Flow_API5</bpmn:incoming>
+      <bpmn:outgoing>Flow_API6</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_API3" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sendTask id="Task_DeliverTask" name="Return new task to Worker">
+      <bpmn:incoming>Flow_API6</bpmn:incoming>
+      <bpmn:outgoing>Flow_APIEnd_New</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:exclusiveGateway id="Gateway_APIMerge" name="">
+      <bpmn:incoming>Flow_APIEnd_Assigned</bpmn:incoming>
+      <bpmn:incoming>Flow_APIEnd_New</bpmn:incoming>
+      <bpmn:outgoing>Flow_APIEnd</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_WorkerAPI" name="Task delivered to Worker">
+      <bpmn:incoming>Flow_APIEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_API1" sourceRef="Start_WorkerAPI" targetRef="Task_CheckWorkerState" />
+    <bpmn:sequenceFlow id="Flow_API2" sourceRef="Task_CheckWorkerState" targetRef="Event_ReceiveState" />
+    <bpmn:sequenceFlow id="Flow_API3" sourceRef="Event_ReceiveState" targetRef="Gateway_WorkerState" />
+    <bpmn:sequenceFlow id="Flow_StateOpen" name="open" sourceRef="Gateway_WorkerState" targetRef="Task_SetInProgress" />
+    <bpmn:sequenceFlow id="Flow_StateAssigned" name="assigned" sourceRef="Gateway_WorkerState" targetRef="Task_ReturnAssigned" />
+    <bpmn:sequenceFlow id="Flow_StateInProgress" name="in progress" sourceRef="Gateway_WorkerState" targetRef="Event_WaitStateChange" />
+    <bpmn:sequenceFlow id="Flow_RetryCheck" sourceRef="Event_WaitStateChange" targetRef="Task_CheckWorkerState" />
+    <bpmn:sequenceFlow id="Flow_API_WaitSetResult" sourceRef="Task_SetInProgress" targetRef="Event_ReceiveSetResult" />
+    <bpmn:sequenceFlow id="Flow_API_CheckSetResult" sourceRef="Event_ReceiveSetResult" targetRef="Gateway_SetResultCheck" />
+    <bpmn:sequenceFlow id="Flow_SetSuccess" name="Yes (ownership acquired)" sourceRef="Gateway_SetResultCheck" targetRef="Task_CallEngine" />
+    <bpmn:sequenceFlow id="Flow_SetFail" name="No (state changed by another instance)" sourceRef="Gateway_SetResultCheck" targetRef="Task_CheckWorkerState" />
+    <bpmn:sequenceFlow id="Flow_API5" sourceRef="Task_CallEngine" targetRef="Event_ReceiveNewTask" />
+    <bpmn:sequenceFlow id="Flow_API6" sourceRef="Event_ReceiveNewTask" targetRef="Task_DeliverTask" />
+    <bpmn:sequenceFlow id="Flow_APIEnd_Assigned" sourceRef="Task_ReturnAssigned" targetRef="Gateway_APIMerge" />
+    <bpmn:sequenceFlow id="Flow_APIEnd_New" sourceRef="Task_DeliverTask" targetRef="Gateway_APIMerge" />
+    <bpmn:sequenceFlow id="Flow_APIEnd" sourceRef="Gateway_APIMerge" targetRef="End_WorkerAPI" />
+  </bpmn:process>
+  <bpmn:process id="Process_WorkerDB" isExecutable="false">
+    <bpmn:startEvent id="Start_WorkerDB" name="Receive state check request">
+      <bpmn:outgoing>Flow_WDB1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_WDB1" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_LookupState" name="Look up Worker&#39;s current state">
+      <bpmn:incoming>Flow_WDB1</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_ReturnWorkerState" name="Return Worker state">
+      <bpmn:incoming>Flow_WDB2</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB_End1</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_WDB_StateCheck" name="State check complete">
+      <bpmn:incoming>Flow_WDB_End1</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:startEvent id="Event_SetStateReq" name="Receive conditional write request">
+      <bpmn:outgoing>Flow_WDB3</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_WDB2" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_ConditionalWrite" name="Execute: UPDATE state = &#39;in progress&#39; WHERE state = &#39;open&#39;">
+      <bpmn:incoming>Flow_WDB3</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_ReturnSetResult" name="Return result (success if state was &#39;open&#39;, failure otherwise)">
+      <bpmn:incoming>Flow_WDB4</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB_End2</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_WDB_SetState" name="Conditional write complete">
+      <bpmn:incoming>Flow_WDB_End2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:startEvent id="Event_ReadWorkerMetaReq" name="Receive metadata read request">
+      <bpmn:outgoing>Flow_WDB5</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_WDB3" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_LookupWorkerMeta" name="Look up Worker&#39;s metadata (skills, capacity, history)">
+      <bpmn:incoming>Flow_WDB5</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB6</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_ReturnWorkerMeta" name="Return Worker metadata">
+      <bpmn:incoming>Flow_WDB6</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB_End3</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_WDB_Meta" name="Metadata read complete">
+      <bpmn:incoming>Flow_WDB_End3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:startEvent id="Event_RecordAssignmentReq" name="Receive record assignment request">
+      <bpmn:outgoing>Flow_WDB7</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_WDB4" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_GuardedAssignWrite" name="Execute: UPDATE assignment, state = &#39;assigned&#39; WHERE state = &#39;in progress&#39;">
+      <bpmn:incoming>Flow_WDB7</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB8</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_ReturnRecordResult" name="Return result (success if state was &#39;in progress&#39;, failure and current task otherwise)">
+      <bpmn:incoming>Flow_WDB8</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB_End4</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_WDB_Record" name="Record assignment complete">
+      <bpmn:incoming>Flow_WDB_End4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_WDB1" sourceRef="Start_WorkerDB" targetRef="Task_LookupState" />
+    <bpmn:sequenceFlow id="Flow_WDB2" sourceRef="Task_LookupState" targetRef="Task_ReturnWorkerState" />
+    <bpmn:sequenceFlow id="Flow_WDB_End1" sourceRef="Task_ReturnWorkerState" targetRef="End_WDB_StateCheck" />
+    <bpmn:sequenceFlow id="Flow_WDB3" sourceRef="Event_SetStateReq" targetRef="Task_ConditionalWrite" />
+    <bpmn:sequenceFlow id="Flow_WDB4" sourceRef="Task_ConditionalWrite" targetRef="Task_ReturnSetResult" />
+    <bpmn:sequenceFlow id="Flow_WDB_End2" sourceRef="Task_ReturnSetResult" targetRef="End_WDB_SetState" />
+    <bpmn:sequenceFlow id="Flow_WDB5" sourceRef="Event_ReadWorkerMetaReq" targetRef="Task_LookupWorkerMeta" />
+    <bpmn:sequenceFlow id="Flow_WDB6" sourceRef="Task_LookupWorkerMeta" targetRef="Task_ReturnWorkerMeta" />
+    <bpmn:sequenceFlow id="Flow_WDB_End3" sourceRef="Task_ReturnWorkerMeta" targetRef="End_WDB_Meta" />
+    <bpmn:sequenceFlow id="Flow_WDB7" sourceRef="Event_RecordAssignmentReq" targetRef="Task_GuardedAssignWrite" />
+    <bpmn:sequenceFlow id="Flow_WDB8" sourceRef="Task_GuardedAssignWrite" targetRef="Task_ReturnRecordResult" />
+    <bpmn:sequenceFlow id="Flow_WDB_End4" sourceRef="Task_ReturnRecordResult" targetRef="End_WDB_Record" />
+  </bpmn:process>
+  <bpmn:process id="Process_TaskAssign" isExecutable="false">
+    <bpmn:sequenceFlow id="Flow_TA6" sourceRef="Task_FilterAndSort" targetRef="Activity_1thh7ty" />
+    <bpmn:sequenceFlow id="Flow_TA5" sourceRef="Event_ReceiveWorkerMeta" targetRef="Task_FilterAndSort" />
+    <bpmn:sequenceFlow id="Flow_TA4" sourceRef="Task_ReadWorkerMeta" targetRef="Event_ReceiveWorkerMeta" />
+    <bpmn:sequenceFlow id="Flow_TA3" sourceRef="Event_ReceiveUnblocked" targetRef="Task_ReadWorkerMeta" />
+    <bpmn:sequenceFlow id="Flow_TA2" sourceRef="Task_QueryUnblocked" targetRef="Event_ReceiveUnblocked" />
+    <bpmn:sequenceFlow id="Flow_TA1" sourceRef="Start_TaskAssign" targetRef="Task_QueryUnblocked" />
+    <bpmn:startEvent id="Start_TaskAssign" name="Receive assignment request">
+      <bpmn:outgoing>Flow_TA1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_TA1" />
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_10lcpbq" sourceRef="Activity_1thh7ty" targetRef="Event_0bm8tmy" />
+    <bpmn:sequenceFlow id="Flow_RecordNo" name="No (state conflict - edge case)" sourceRef="Gateway_RecordSuccess" targetRef="Task_RevertTaskAssign" />
+    <bpmn:sequenceFlow id="Flow_TA_Abort" sourceRef="Task_RevertTaskAssign" targetRef="Task_ReturnNewTask" />
+    <bpmn:serviceTask id="Task_MoveToNext" name="Move to next candidate task in sorted list">
+      <bpmn:incoming>Flow_AssignNo</bpmn:incoming>
+      <bpmn:outgoing>Flow_RetryAssign</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:intermediateCatchEvent id="Event_ReceiveRecordResult" name="Receive record result">
+      <bpmn:incoming>Flow_TA_WaitRecord</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA_CheckRecord</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_TA_Record" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:exclusiveGateway id="Gateway_RecordSuccess" name="Worker not in &#39;assigned&#39; state?">
+      <bpmn:incoming>Flow_TA_CheckRecord</bpmn:incoming>
+      <bpmn:outgoing>Flow_RecordYes</bpmn:outgoing>
+      <bpmn:outgoing>Flow_RecordNo</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="Task_ReturnNewTask" name="Return assigned task to Worker API Handler">
+      <bpmn:incoming>Flow_RecordYes</bpmn:incoming>
+      <bpmn:incoming>Flow_TA_Abort</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA10</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_TaskAssign" name="Task assigned successfully">
+      <bpmn:incoming>Flow_TA10</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_RetryAssign" sourceRef="Task_MoveToNext" targetRef="Task_AttemptAssign" />
+    <bpmn:sequenceFlow id="Flow_TA7" sourceRef="Task_AttemptAssign" targetRef="Event_ReceiveAssignResult" />
+    <bpmn:sequenceFlow id="Flow_TA8" sourceRef="Event_ReceiveAssignResult" targetRef="Gateway_AssignSuccess" />
+    <bpmn:sequenceFlow id="Flow_AssignYes" name="Yes" sourceRef="Gateway_AssignSuccess" targetRef="Task_RecordAssignment" />
+    <bpmn:sequenceFlow id="Flow_AssignNo" name="No (task already taken)" sourceRef="Gateway_AssignSuccess" targetRef="Task_MoveToNext" />
+    <bpmn:sequenceFlow id="Flow_TA_WaitRecord" sourceRef="Task_RecordAssignment" targetRef="Event_ReceiveRecordResult" />
+    <bpmn:sequenceFlow id="Flow_TA_CheckRecord" sourceRef="Event_ReceiveRecordResult" targetRef="Gateway_RecordSuccess" />
+    <bpmn:sequenceFlow id="Flow_RecordYes" name="Yes (state was &#39;in progress&#39;)" sourceRef="Gateway_RecordSuccess" targetRef="Task_ReturnNewTask" />
+    <bpmn:sequenceFlow id="Flow_TA10" sourceRef="Task_ReturnNewTask" targetRef="End_TaskAssign" />
+    <bpmn:sequenceFlow id="Flow_0cxch34" sourceRef="Event_0bm8tmy" targetRef="Gateway_1q720bd" />
+    <bpmn:sendTask id="Task_QueryUnblocked" name="Query Task Dependency Graph for unblocked tasks">
+      <bpmn:incoming>Flow_TA1</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA2</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_ReceiveUnblocked" name="Receive unblocked task list">
+      <bpmn:incoming>Flow_TA2</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA3</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_TA2" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sendTask id="Task_ReadWorkerMeta" name="Read Worker&#39;s metadata from Worker Database">
+      <bpmn:incoming>Flow_TA3</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA4</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_ReceiveWorkerMeta" name="Receive Worker metadata">
+      <bpmn:incoming>Flow_TA4</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA5</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_TA3" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_FilterAndSort" name="Filter unblocked tasks by Worker capabilities; sort by priority and deadline">
+      <bpmn:incoming>Flow_TA5</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA6</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Activity_1thh7ty" name="Check if one of the tasks is owned by this worker and is not complete">
+      <bpmn:incoming>Flow_TA6</bpmn:incoming>
+      <bpmn:outgoing>Flow_10lcpbq</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_0bm8tmy" name="Receive query result">
+      <bpmn:incoming>Flow_10lcpbq</bpmn:incoming>
+      <bpmn:outgoing>Flow_0cxch34</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MessageEventDefinition_0srtwm9" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sendTask id="Task_RecordAssignment" name="Conditional write: record assigned task in Worker Database WHERE state = &#39;in progress&#39;">
+      <bpmn:incoming>Flow_AssignYes</bpmn:incoming>
+      <bpmn:incoming>Flow_0xpen27</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA_WaitRecord</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:exclusiveGateway id="Gateway_AssignSuccess" name="Task assignment in Task DB succeeded?">
+      <bpmn:incoming>Flow_TA8</bpmn:incoming>
+      <bpmn:outgoing>Flow_AssignYes</bpmn:outgoing>
+      <bpmn:outgoing>Flow_AssignNo</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateCatchEvent id="Event_ReceiveAssignResult" name="Receive assignment result">
+      <bpmn:incoming>Flow_TA7</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA8</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_TA4" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sendTask id="Task_AttemptAssign" name="Attempt to assign top candidate task in Task Database">
+      <bpmn:incoming>Flow_RetryAssign</bpmn:incoming>
+      <bpmn:incoming>Flow_1r88912</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA7</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sequenceFlow id="Flow_1r88912" sourceRef="Gateway_1q720bd" targetRef="Task_AttemptAssign" />
+    <bpmn:sequenceFlow id="Flow_0xpen27" sourceRef="Gateway_1q720bd" targetRef="Task_RecordAssignment" />
+    <bpmn:exclusiveGateway id="Gateway_1q720bd" name="Assignment present? (edge case)">
+      <bpmn:incoming>Flow_0cxch34</bpmn:incoming>
+      <bpmn:outgoing>Flow_1r88912</bpmn:outgoing>
+      <bpmn:outgoing>Flow_0xpen27</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_RevertTaskAssign" name="Revert task assignment in Task Database (unassign the task)">
+      <bpmn:incoming>Flow_RecordNo</bpmn:incoming>
+      <bpmn:outgoing>Flow_TA_Abort</bpmn:outgoing>
+    </bpmn:serviceTask>
+  </bpmn:process>
+  <bpmn:process id="Process_DepGraph" isExecutable="false">
+    <bpmn:startEvent id="Start_DepGraph" name="Receive unblocked tasks query">
+      <bpmn:outgoing>Flow_DG1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_DG1" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_ComputeUnblocked" name="Compute list of unblocked (assignable) tasks">
+      <bpmn:incoming>Flow_DG1</bpmn:incoming>
+      <bpmn:outgoing>Flow_DG2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_ReturnUnblocked" name="Return unblocked task list">
+      <bpmn:incoming>Flow_DG2</bpmn:incoming>
+      <bpmn:outgoing>Flow_DG3</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_DepGraph" name="Query answered">
+      <bpmn:incoming>Flow_DG3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_DG1" sourceRef="Start_DepGraph" targetRef="Task_ComputeUnblocked" />
+    <bpmn:sequenceFlow id="Flow_DG2" sourceRef="Task_ComputeUnblocked" targetRef="Task_ReturnUnblocked" />
+    <bpmn:sequenceFlow id="Flow_DG3" sourceRef="Task_ReturnUnblocked" targetRef="End_DepGraph" />
+  </bpmn:process>
+  <bpmn:process id="Process_TaskDB" isExecutable="false">
+    <bpmn:startEvent id="Start_TaskDB" name="Receive assignment attempt">
+      <bpmn:outgoing>Flow_TDB1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_TDB1" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_TryAssign" name="Attempt to mark task as assigned to Worker (conditional write)">
+      <bpmn:incoming>Flow_TDB1</bpmn:incoming>
+      <bpmn:outgoing>Flow_TDB2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_ReturnAssignResult" name="Return assignment result (success/failure)">
+      <bpmn:incoming>Flow_TDB2</bpmn:incoming>
+      <bpmn:outgoing>Flow_TDB3</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_TaskDB" name="Assignment attempt processed">
+      <bpmn:incoming>Flow_TDB3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_TDB1" sourceRef="Start_TaskDB" targetRef="Task_TryAssign" />
+    <bpmn:sequenceFlow id="Flow_TDB2" sourceRef="Task_TryAssign" targetRef="Task_ReturnAssignResult" />
+    <bpmn:sequenceFlow id="Flow_TDB3" sourceRef="Task_ReturnAssignResult" targetRef="End_TaskDB" />
+    <bpmn:startEvent id="Event_0skpvw5" name="Receive precheck query">
+      <bpmn:outgoing>Flow_1ptwog4</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MessageEventDefinition_0rh56lb" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Activity_17f5onh" name="Check if one of the tasks is owned by this worker and is not complete">
+      <bpmn:incoming>Flow_1ptwog4</bpmn:incoming>
+      <bpmn:outgoing>Flow_0sy3jph</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Activity_1i817aj" name="Return query result (none/one)">
+      <bpmn:incoming>Flow_0sy3jph</bpmn:incoming>
+      <bpmn:outgoing>Flow_0m3w37j</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="Event_03eiue9" name="Precheck Query Processed">
+      <bpmn:incoming>Flow_0m3w37j</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1ptwog4" sourceRef="Event_0skpvw5" targetRef="Activity_17f5onh" />
+    <bpmn:sequenceFlow id="Flow_0sy3jph" sourceRef="Activity_17f5onh" targetRef="Activity_1i817aj" />
+    <bpmn:sequenceFlow id="Flow_0m3w37j" sourceRef="Activity_1i817aj" targetRef="Event_03eiue9" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_WF2">
+    <bpmndi:BPMNPlane id="BPMNPlane_WF2" bpmnElement="Collaboration_WF2">
+      <bpmndi:BPMNShape id="SP_Worker" bpmnElement="Participant_Worker" isHorizontal="true">
+        <dc:Bounds x="160" y="60" width="1800" height="130" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SW1" bpmnElement="Start_Worker">
+        <dc:Bounds x="222" y="107" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SW2" bpmnElement="Task_WorkerRequest">
+        <dc:Bounds x="310" y="85" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SW3" bpmnElement="Event_WorkerReceivesTask">
+        <dc:Bounds x="1742" y="107" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SW4" bpmnElement="End_Worker">
+        <dc:Bounds x="1832" y="107" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="EW1" bpmnElement="Flow_W1">
+        <di:waypoint x="258" y="125" />
+        <di:waypoint x="310" y="125" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EW2" bpmnElement="Flow_W2">
+        <di:waypoint x="410" y="125" />
+        <di:waypoint x="1742" y="125" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EW3" bpmnElement="Flow_W3">
+        <di:waypoint x="1778" y="125" />
+        <di:waypoint x="1832" y="125" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_API" bpmnElement="Participant_WorkerAPI" isHorizontal="true">
+        <dc:Bounds x="160" y="240" width="1800" height="300" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI1" bpmnElement="Start_WorkerAPI">
+        <dc:Bounds x="222" y="382" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI2" bpmnElement="Task_CheckWorkerState">
+        <dc:Bounds x="310" y="360" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI3" bpmnElement="Event_ReceiveState">
+        <dc:Bounds x="452" y="382" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI4" bpmnElement="Gateway_WorkerState" isMarkerVisible="true">
+        <dc:Bounds x="535" y="375" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI5" bpmnElement="Event_WaitStateChange">
+        <dc:Bounds x="542" y="272" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI6" bpmnElement="Task_ReturnAssigned">
+        <dc:Bounds x="640" y="270" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI7" bpmnElement="Task_SetInProgress">
+        <dc:Bounds x="640" y="420" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI7b" bpmnElement="Event_ReceiveSetResult">
+        <dc:Bounds x="782" y="442" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI7c" bpmnElement="Gateway_SetResultCheck" isMarkerVisible="true">
+        <dc:Bounds x="855" y="435" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI8" bpmnElement="Task_CallEngine">
+        <dc:Bounds x="950" y="420" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI9" bpmnElement="Event_ReceiveNewTask">
+        <dc:Bounds x="1452" y="442" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1434" y="404.5" width="72" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI10" bpmnElement="Task_DeliverTask">
+        <dc:Bounds x="1530" y="420" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI11" bpmnElement="Gateway_APIMerge" isMarkerVisible="true">
+        <dc:Bounds x="1685" y="375" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SAPI12" bpmnElement="End_WorkerAPI">
+        <dc:Bounds x="1782" y="382" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="EAPI1" bpmnElement="Flow_API1">
+        <di:waypoint x="258" y="400" />
+        <di:waypoint x="310" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI2" bpmnElement="Flow_API2">
+        <di:waypoint x="410" y="400" />
+        <di:waypoint x="452" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI3" bpmnElement="Flow_API3">
+        <di:waypoint x="488" y="400" />
+        <di:waypoint x="535" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI4" bpmnElement="Flow_StateOpen">
+        <di:waypoint x="560" y="425" />
+        <di:waypoint x="560" y="460" />
+        <di:waypoint x="640" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI5" bpmnElement="Flow_StateAssigned">
+        <di:waypoint x="585" y="400" />
+        <di:waypoint x="610" y="400" />
+        <di:waypoint x="610" y="310" />
+        <di:waypoint x="640" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI6" bpmnElement="Flow_StateInProgress">
+        <di:waypoint x="560" y="375" />
+        <di:waypoint x="560" y="308" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI7" bpmnElement="Flow_RetryCheck">
+        <di:waypoint x="542" y="290" />
+        <di:waypoint x="360" y="290" />
+        <di:waypoint x="360" y="360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI7b" bpmnElement="Flow_API_WaitSetResult">
+        <di:waypoint x="740" y="460" />
+        <di:waypoint x="782" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI7c" bpmnElement="Flow_API_CheckSetResult">
+        <di:waypoint x="818" y="460" />
+        <di:waypoint x="855" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI7d" bpmnElement="Flow_SetSuccess">
+        <di:waypoint x="905" y="460" />
+        <di:waypoint x="950" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI7e" bpmnElement="Flow_SetFail">
+        <di:waypoint x="880" y="485" />
+        <di:waypoint x="880" y="510" />
+        <di:waypoint x="360" y="510" />
+        <di:waypoint x="360" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI9" bpmnElement="Flow_API5">
+        <di:waypoint x="1050" y="460" />
+        <di:waypoint x="1452" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI10" bpmnElement="Flow_API6">
+        <di:waypoint x="1488" y="460" />
+        <di:waypoint x="1530" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI11" bpmnElement="Flow_APIEnd_Assigned">
+        <di:waypoint x="740" y="310" />
+        <di:waypoint x="1710" y="310" />
+        <di:waypoint x="1710" y="375" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI12" bpmnElement="Flow_APIEnd_New">
+        <di:waypoint x="1630" y="460" />
+        <di:waypoint x="1710" y="460" />
+        <di:waypoint x="1710" y="425" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EAPI13" bpmnElement="Flow_APIEnd">
+        <di:waypoint x="1735" y="400" />
+        <di:waypoint x="1782" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_WDB" bpmnElement="Participant_WorkerDB" isHorizontal="true">
+        <dc:Bounds x="160" y="590" width="1800" height="220" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB1" bpmnElement="Start_WorkerDB">
+        <dc:Bounds x="342" y="632" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB2" bpmnElement="Task_LookupState">
+        <dc:Bounds x="400" y="610" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB3" bpmnElement="Task_ReturnWorkerState">
+        <dc:Bounds x="520" y="610" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB3e" bpmnElement="End_WDB_StateCheck">
+        <dc:Bounds x="642" y="632" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB4" bpmnElement="Event_SetStateReq">
+        <dc:Bounds x="672" y="722" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB5" bpmnElement="Task_ConditionalWrite">
+        <dc:Bounds x="730" y="700" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB6" bpmnElement="Task_ReturnSetResult">
+        <dc:Bounds x="850" y="700" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB6e" bpmnElement="End_WDB_SetState">
+        <dc:Bounds x="972" y="722" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB7" bpmnElement="Event_ReadWorkerMetaReq">
+        <dc:Bounds x="1062" y="632" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1035" y="594.5" width="89" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB8" bpmnElement="Task_LookupWorkerMeta">
+        <dc:Bounds x="1120" y="610" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB9" bpmnElement="Task_ReturnWorkerMeta">
+        <dc:Bounds x="1240" y="610" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB9e" bpmnElement="End_WDB_Meta">
+        <dc:Bounds x="1362" y="632" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB10" bpmnElement="Event_RecordAssignmentReq">
+        <dc:Bounds x="1392" y="722" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB11" bpmnElement="Task_GuardedAssignWrite">
+        <dc:Bounds x="1450" y="700" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB12" bpmnElement="Task_ReturnRecordResult">
+        <dc:Bounds x="1570" y="700" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB12e" bpmnElement="End_WDB_Record">
+        <dc:Bounds x="1692" y="722" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="EWDB1" bpmnElement="Flow_WDB1">
+        <di:waypoint x="378" y="650" />
+        <di:waypoint x="400" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB2" bpmnElement="Flow_WDB2">
+        <di:waypoint x="500" y="650" />
+        <di:waypoint x="520" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB2e" bpmnElement="Flow_WDB_End1">
+        <di:waypoint x="620" y="650" />
+        <di:waypoint x="642" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB3" bpmnElement="Flow_WDB3">
+        <di:waypoint x="708" y="740" />
+        <di:waypoint x="730" y="740" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB4" bpmnElement="Flow_WDB4">
+        <di:waypoint x="830" y="740" />
+        <di:waypoint x="850" y="740" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB4e" bpmnElement="Flow_WDB_End2">
+        <di:waypoint x="950" y="740" />
+        <di:waypoint x="972" y="740" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB5" bpmnElement="Flow_WDB5">
+        <di:waypoint x="1098" y="650" />
+        <di:waypoint x="1120" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB6" bpmnElement="Flow_WDB6">
+        <di:waypoint x="1220" y="650" />
+        <di:waypoint x="1240" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB6e" bpmnElement="Flow_WDB_End3">
+        <di:waypoint x="1340" y="650" />
+        <di:waypoint x="1362" y="650" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB7" bpmnElement="Flow_WDB7">
+        <di:waypoint x="1428" y="740" />
+        <di:waypoint x="1450" y="740" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB8" bpmnElement="Flow_WDB8">
+        <di:waypoint x="1550" y="740" />
+        <di:waypoint x="1570" y="740" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB8e" bpmnElement="Flow_WDB_End4">
+        <di:waypoint x="1670" y="740" />
+        <di:waypoint x="1692" y="740" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_TA" bpmnElement="Participant_TaskAssign" isHorizontal="true">
+        <dc:Bounds x="160" y="860" width="1800" height="260" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA1" bpmnElement="Start_TaskAssign">
+        <dc:Bounds x="222" y="962" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="211" y="998" width="58" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA10" bpmnElement="Task_MoveToNext">
+        <dc:Bounds x="1303" y="880" width="100" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA11b" bpmnElement="Event_ReceiveRecordResult">
+        <dc:Bounds x="1565" y="962" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1546" y="998" width="75" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA11c" bpmnElement="Gateway_RecordSuccess" isMarkerVisible="true">
+        <dc:Bounds x="1638" y="955" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1622" y="918" width="82" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA12" bpmnElement="Task_ReturnNewTask">
+        <dc:Bounds x="1753" y="940" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA13" bpmnElement="End_TaskAssign">
+        <dc:Bounds x="1895" y="962" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1878" y="998" width="70" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA2" bpmnElement="Task_QueryUnblocked">
+        <dc:Bounds x="290" y="940" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA3" bpmnElement="Event_ReceiveUnblocked">
+        <dc:Bounds x="422" y="962" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="403" y="998" width="75" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA4" bpmnElement="Task_ReadWorkerMeta">
+        <dc:Bounds x="490" y="940" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA5" bpmnElement="Event_ReceiveWorkerMeta">
+        <dc:Bounds x="622" y="962" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="600" y="998" width="80" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA6" bpmnElement="Task_FilterAndSort">
+        <dc:Bounds x="700" y="940" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_1jz3x7c" bpmnElement="Activity_1thh7ty">
+        <dc:Bounds x="830" y="940" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_0lebibi" bpmnElement="Event_0bm8tmy">
+        <dc:Bounds x="962" y="962" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="944" y="924.5" width="71" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA11" bpmnElement="Task_RecordAssignment">
+        <dc:Bounds x="1440" y="940" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA9" bpmnElement="Gateway_AssignSuccess" isMarkerVisible="true">
+        <dc:Bounds x="1365" y="955" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1349" y="1005" width="83" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA8" bpmnElement="Event_ReceiveAssignResult">
+        <dc:Bounds x="1302" y="962" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1276" y="998" width="88" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA7" bpmnElement="Task_AttemptAssign">
+        <dc:Bounds x="1180" y="940" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_199ughf" bpmnElement="Gateway_1q720bd" isMarkerVisible="true">
+        <dc:Bounds x="1035" y="955" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1022" y="905" width="75" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STA11d" bpmnElement="Task_RevertTaskAssign">
+        <dc:Bounds x="1680" y="1040" width="100" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="ETA1" bpmnElement="Flow_TA1">
+        <di:waypoint x="258" y="980" />
+        <di:waypoint x="290" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA2" bpmnElement="Flow_TA2">
+        <di:waypoint x="390" y="980" />
+        <di:waypoint x="422" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA3" bpmnElement="Flow_TA3">
+        <di:waypoint x="458" y="980" />
+        <di:waypoint x="490" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA4" bpmnElement="Flow_TA4">
+        <di:waypoint x="590" y="980" />
+        <di:waypoint x="622" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA5" bpmnElement="Flow_TA5">
+        <di:waypoint x="658" y="980" />
+        <di:waypoint x="700" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA6" bpmnElement="Flow_TA6">
+        <di:waypoint x="800" y="980" />
+        <di:waypoint x="830" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10lcpbq_di" bpmnElement="Flow_10lcpbq">
+        <di:waypoint x="930" y="980" />
+        <di:waypoint x="962" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA11e" bpmnElement="Flow_RecordNo">
+        <di:waypoint x="1663" y="1005" />
+        <di:waypoint x="1663" y="1070" />
+        <di:waypoint x="1680" y="1070" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1621" y="1004" width="83" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA11f" bpmnElement="Flow_TA_Abort">
+        <di:waypoint x="1730" y="1040" />
+        <di:waypoint x="1730" y="1010" />
+        <di:waypoint x="1753" y="1010" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA11" bpmnElement="Flow_RetryAssign">
+        <di:waypoint x="1303" y="905" />
+        <di:waypoint x="1230" y="905" />
+        <di:waypoint x="1230" y="940" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA7" bpmnElement="Flow_TA7">
+        <di:waypoint x="1280" y="980" />
+        <di:waypoint x="1302" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA8" bpmnElement="Flow_TA8">
+        <di:waypoint x="1338" y="980" />
+        <di:waypoint x="1365" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA9" bpmnElement="Flow_AssignYes">
+        <di:waypoint x="1415" y="980" />
+        <di:waypoint x="1440" y="980" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1419" y="955" width="18" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA10" bpmnElement="Flow_AssignNo">
+        <di:waypoint x="1390" y="955" />
+        <di:waypoint x="1390" y="943" />
+        <di:waypoint x="1353" y="943" />
+        <di:waypoint x="1353" y="930" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1365" y="937" width="81" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA11b" bpmnElement="Flow_TA_WaitRecord">
+        <di:waypoint x="1540" y="980" />
+        <di:waypoint x="1565" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA11c" bpmnElement="Flow_TA_CheckRecord">
+        <di:waypoint x="1601" y="980" />
+        <di:waypoint x="1638" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA11d" bpmnElement="Flow_RecordYes">
+        <di:waypoint x="1688" y="980" />
+        <di:waypoint x="1753" y="980" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1678" y="955" width="85" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETA12" bpmnElement="Flow_TA10">
+        <di:waypoint x="1853" y="980" />
+        <di:waypoint x="1895" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0cxch34_di" bpmnElement="Flow_0cxch34">
+        <di:waypoint x="998" y="980" />
+        <di:waypoint x="1035" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1r88912_di" bpmnElement="Flow_1r88912">
+        <di:waypoint x="1085" y="980" />
+        <di:waypoint x="1180" y="980" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0xpen27_di" bpmnElement="Flow_0xpen27">
+        <di:waypoint x="1060" y="1005" />
+        <di:waypoint x="1060" y="1070" />
+        <di:waypoint x="1490" y="1070" />
+        <di:waypoint x="1490" y="1020" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_DG" bpmnElement="Participant_DepGraph" isHorizontal="true">
+        <dc:Bounds x="160" y="1170" width="1800" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDG1" bpmnElement="Start_DepGraph">
+        <dc:Bounds x="332" y="1222" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDG2" bpmnElement="Task_ComputeUnblocked">
+        <dc:Bounds x="410" y="1200" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDG3" bpmnElement="Task_ReturnUnblocked">
+        <dc:Bounds x="550" y="1200" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDG4" bpmnElement="End_DepGraph">
+        <dc:Bounds x="692" y="1222" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="EDG1" bpmnElement="Flow_DG1">
+        <di:waypoint x="368" y="1240" />
+        <di:waypoint x="410" y="1240" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDG2" bpmnElement="Flow_DG2">
+        <di:waypoint x="510" y="1240" />
+        <di:waypoint x="550" y="1240" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDG3" bpmnElement="Flow_DG3">
+        <di:waypoint x="650" y="1240" />
+        <di:waypoint x="692" y="1240" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_TDB" bpmnElement="Participant_TaskDB" isHorizontal="true">
+        <dc:Bounds x="160" y="1360" width="1800" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB1" bpmnElement="Start_TaskDB">
+        <dc:Bounds x="1027" y="1412" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1016" y="1448" width="58" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB2" bpmnElement="Task_TryAssign">
+        <dc:Bounds x="1105" y="1390" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB3" bpmnElement="Task_ReturnAssignResult">
+        <dc:Bounds x="1245" y="1390" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB4" bpmnElement="End_TaskDB">
+        <dc:Bounds x="1387" y="1412" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1376" y="1448" width="58" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_0cl0f18" bpmnElement="Event_0skpvw5">
+        <dc:Bounds x="540" y="1412" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="514" y="1448" width="89" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_0pri7tb" bpmnElement="Activity_17f5onh">
+        <dc:Bounds x="618" y="1390" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_12035l6" bpmnElement="Activity_1i817aj">
+        <dc:Bounds x="758" y="1390" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_17eucej" bpmnElement="Event_03eiue9">
+        <dc:Bounds x="900" y="1412" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="879" y="1448" width="79" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="ETDB1" bpmnElement="Flow_TDB1">
+        <di:waypoint x="1063" y="1430" />
+        <di:waypoint x="1105" y="1430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETDB2" bpmnElement="Flow_TDB2">
+        <di:waypoint x="1205" y="1430" />
+        <di:waypoint x="1245" y="1430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETDB3" bpmnElement="Flow_TDB3">
+        <di:waypoint x="1345" y="1430" />
+        <di:waypoint x="1387" y="1430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_0zcmb0p" bpmnElement="Flow_1ptwog4">
+        <di:waypoint x="576" y="1430" />
+        <di:waypoint x="618" y="1430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_03i2pl3" bpmnElement="Flow_0sy3jph">
+        <di:waypoint x="718" y="1430" />
+        <di:waypoint x="758" y="1430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BPMNEdge_1ut3guh" bpmnElement="Flow_0m3w37j">
+        <di:waypoint x="858" y="1430" />
+        <di:waypoint x="900" y="1430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_0e0yk47_di" bpmnElement="Association_0e0yk47">
+        <di:waypoint x="894" y="1227" />
+        <di:waypoint x="948" y="1250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_0y3jtlt_di" bpmnElement="Association_0y3jtlt">
+        <di:waypoint x="840" y="1195" />
+        <di:waypoint x="820" y="1185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_1pdspjk_di" bpmnElement="Association_1pdspjk">
+        <di:waypoint x="1133" y="980" />
+        <di:waypoint x="1125" y="1000" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Association_1z08jxw_di" bpmnElement="Association_1z08jxw">
+        <di:waypoint x="1108" y="1070" />
+        <di:waypoint x="1080" y="1076" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF1" bpmnElement="MF_WorkerReq">
+        <di:waypoint x="360" y="165" />
+        <di:waypoint x="240" y="382" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF_Deliver" bpmnElement="MF_DeliverTask">
+        <di:waypoint x="1580" y="420" />
+        <di:waypoint x="1760" y="143" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF_ReturnAssigned" bpmnElement="MF_ReturnAssignedExisting">
+        <di:waypoint x="690" y="270" />
+        <di:waypoint x="1760" y="143" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF2" bpmnElement="MF_CheckState">
+        <di:waypoint x="360" y="440" />
+        <di:waypoint x="360" y="632" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF3" bpmnElement="MF_ReturnState">
+        <di:waypoint x="570" y="610" />
+        <di:waypoint x="470" y="418" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF4" bpmnElement="MF_SetInProgress">
+        <di:waypoint x="690" y="500" />
+        <di:waypoint x="690" y="722" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF4b" bpmnElement="MF_SetInProgressAck">
+        <di:waypoint x="900" y="700" />
+        <di:waypoint x="800" y="478" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF5" bpmnElement="MF_CallEngine">
+        <di:waypoint x="1000" y="500" />
+        <di:waypoint x="240" y="962" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="591" y="706" width="59" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF6" bpmnElement="MF_QueryUnblocked">
+        <di:waypoint x="350" y="1020" />
+        <di:waypoint x="350" y="1222" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="322" y="1111" width="86" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF7" bpmnElement="MF_ReturnUnblocked">
+        <di:waypoint x="628" y="1200" />
+        <di:waypoint x="628" y="1099" />
+        <di:waypoint x="428" y="1099" />
+        <di:waypoint x="428" y="993" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="381" y="1028" width="79" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF8" bpmnElement="MF_ReadWorkerMeta">
+        <di:waypoint x="540" y="940" />
+        <di:waypoint x="540" y="804" />
+        <di:waypoint x="1080" y="804" />
+        <di:waypoint x="1080" y="668" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="497" y="857" width="66" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF9" bpmnElement="MF_ReturnWorkerMeta">
+        <di:waypoint x="1290" y="690" />
+        <di:waypoint x="1290" y="826" />
+        <di:waypoint x="640" y="826" />
+        <di:waypoint x="640" y="962" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="614" y="886" width="84" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF10" bpmnElement="MF_AttemptAssign">
+        <di:waypoint x="1180" y="1010" />
+        <di:waypoint x="1180" y="1216" />
+        <di:waypoint x="1045" y="1216" />
+        <di:waypoint x="1045" y="1412" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1152" y="1102" width="86" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF11" bpmnElement="MF_AssignResult">
+        <di:waypoint x="1314" y="1390" />
+        <di:waypoint x="1314" y="997" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1281" y="1172" width="58" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF12" bpmnElement="MF_RecordAssignment">
+        <di:waypoint x="1443" y="943" />
+        <di:waypoint x="1443" y="849" />
+        <di:waypoint x="1426" y="849" />
+        <di:waypoint x="1426" y="748" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1410" y="866" width="77" height="66" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF12b" bpmnElement="MF_RecordAssignmentResult">
+        <di:waypoint x="1599" y="780" />
+        <di:waypoint x="1599" y="972" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1649" y="859" width="81" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF13" bpmnElement="MF_ReturnTask">
+        <di:waypoint x="1813" y="940" />
+        <di:waypoint x="1813" y="709" />
+        <di:waypoint x="1466" y="709" />
+        <di:waypoint x="1466" y="477" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1772" y="809" width="71" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_01zioow_di" bpmnElement="Flow_01zioow">
+        <di:waypoint x="880" y="1020" />
+        <di:waypoint x="880" y="1160" />
+        <di:waypoint x="800" y="1230" />
+        <di:waypoint x="572" y="1419" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1clduui_di" bpmnElement="Flow_1clduui">
+        <di:waypoint x="808" y="1390" />
+        <di:waypoint x="808" y="1260" />
+        <di:waypoint x="980" y="1194" />
+        <di:waypoint x="980" y="998" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="TextAnnotation_0wbr8zo_di" bpmnElement="TextAnnotation_0wbr8zo">
+        <dc:Bounds x="910" y="1250" width="100" height="30" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_1ceerfx_di" bpmnElement="TextAnnotation_1ceerfx">
+        <dc:Bounds x="770" y="1170" width="100" height="30" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_1fm1mph_di" bpmnElement="TextAnnotation_1fm1mph">
+        <dc:Bounds x="1100" y="1000" width="50" height="30" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TextAnnotation_1v46e61_di" bpmnElement="TextAnnotation_1v46e61">
+        <dc:Bounds x="1030" y="1070" width="50" height="30" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

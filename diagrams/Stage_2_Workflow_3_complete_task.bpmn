@@ -1,0 +1,627 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_WF3" targetNamespace="http://bpmn.io/schema/bpmn" exporter="bpmn-js (https://demo.bpmn.io)" exporterVersion="18.13.2">
+  <bpmn:collaboration id="Collaboration_WF3">
+    <bpmn:participant id="Participant_Worker" name="Worker" processRef="Process_Worker" />
+    <bpmn:participant id="Participant_WorkerAPI" name="Worker API Handler" processRef="Process_WorkerAPI" />
+    <bpmn:participant id="Participant_WorkerDB" name="Worker Database" processRef="Process_WorkerDB" />
+    <bpmn:participant id="Participant_TaskDB" name="Task Database" processRef="Process_TaskDB" />
+    <bpmn:participant id="Participant_DepGraph" name="Task Dependency Graph" processRef="Process_DepGraph" />
+    <bpmn:participant id="Participant_DepHandler" name="Dependency Handler" processRef="Process_DepHandler" />
+    <bpmn:messageFlow id="MF_CompletionReq" name="Task Completion Request (with Task ID)" sourceRef="Task_RequestCompletion" targetRef="Start_API" />
+    <bpmn:messageFlow id="MF_VerifyState" name="Verify Worker State and Assignment" sourceRef="Task_VerifyWorker" targetRef="Start_WDB" />
+    <bpmn:messageFlow id="MF_ReturnVerify" name="Verification Result" sourceRef="Task_ReturnVerification" targetRef="Event_ReceiveVerify" />
+    <bpmn:messageFlow id="MF_MarkComplete" name="Mark Task as Completed" sourceRef="Task_MarkComplete" targetRef="Start_TDB" />
+    <bpmn:messageFlow id="MF_MarkAck" name="Completion Acknowledged" sourceRef="Task_AckCompletion" targetRef="Event_ReceiveMarkAck" />
+    <bpmn:messageFlow id="MF_DHPollDB" name="Poll for Completion Updates" sourceRef="Task_DH_PollTaskDB" targetRef="Event_TDB_ReceivePoll" />
+    <bpmn:messageFlow id="MF_DHPollResult" name="Completion Data" sourceRef="Task_TDB_ReturnPollData" targetRef="Event_DH_ReceivePollResult" />
+    <bpmn:messageFlow id="MF_DHNotifyDep" name="Task Completed Notification" sourceRef="Task_DH_WriteDepUpdates" targetRef="Start_DG" />
+    <bpmn:messageFlow id="MF_ClearWorker" name="Clear Assignment, Set State to &#39;open&#39;" sourceRef="Task_ClearAssignment" targetRef="Event_ClearAssignment" />
+    <bpmn:messageFlow id="MF_Confirmation" name="Completion Confirmation" sourceRef="Task_SendConfirmation" targetRef="Event_WorkerConfirm" />
+    <bpmn:messageFlow id="MF_Rejection" name="Rejection (state/ID mismatch)" sourceRef="Task_SendRejection" targetRef="Event_WorkerRejection" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Worker" isExecutable="false">
+    <bpmn:startEvent id="Start_Worker" name="Worker finishes task">
+      <bpmn:outgoing>Flow_W1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sendTask id="Task_RequestCompletion" name="Request to mark task as complete (submit Task ID)">
+      <bpmn:incoming>Flow_W1</bpmn:incoming>
+      <bpmn:outgoing>Flow_W2</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:eventBasedGateway id="Gateway_WorkerWait" name="">
+      <bpmn:incoming>Flow_W2</bpmn:incoming>
+      <bpmn:outgoing>Flow_W3a</bpmn:outgoing>
+      <bpmn:outgoing>Flow_W3b</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="Event_WorkerConfirm" name="Receive confirmation">
+      <bpmn:incoming>Flow_W3a</bpmn:incoming>
+      <bpmn:outgoing>Flow_W4a</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_WC1" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Event_WorkerRejection" name="Receive rejection">
+      <bpmn:incoming>Flow_W3b</bpmn:incoming>
+      <bpmn:outgoing>Flow_W4b</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_WC2" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="End_Worker_Success" name="Task marked complete">
+      <bpmn:incoming>Flow_W4a</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_Worker_Fail" name="Completion rejected">
+      <bpmn:incoming>Flow_W4b</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_W1" sourceRef="Start_Worker" targetRef="Task_RequestCompletion" />
+    <bpmn:sequenceFlow id="Flow_W2" sourceRef="Task_RequestCompletion" targetRef="Gateway_WorkerWait" />
+    <bpmn:sequenceFlow id="Flow_W3a" sourceRef="Gateway_WorkerWait" targetRef="Event_WorkerConfirm" />
+    <bpmn:sequenceFlow id="Flow_W3b" sourceRef="Gateway_WorkerWait" targetRef="Event_WorkerRejection" />
+    <bpmn:sequenceFlow id="Flow_W4a" sourceRef="Event_WorkerConfirm" targetRef="End_Worker_Success" />
+    <bpmn:sequenceFlow id="Flow_W4b" sourceRef="Event_WorkerRejection" targetRef="End_Worker_Fail" />
+  </bpmn:process>
+  <bpmn:process id="Process_WorkerAPI" isExecutable="false">
+    <bpmn:startEvent id="Start_API" name="Receive completion request">
+      <bpmn:outgoing>Flow_A1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_A1" />
+    </bpmn:startEvent>
+    <bpmn:sendTask id="Task_VerifyWorker" name="Verify Worker state is &#39;assigned&#39; and Task ID matches current assignment">
+      <bpmn:incoming>Flow_A1</bpmn:incoming>
+      <bpmn:outgoing>Flow_A2</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_ReceiveVerify" name="Receive verification result">
+      <bpmn:incoming>Flow_A2</bpmn:incoming>
+      <bpmn:outgoing>Flow_A3</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_A2" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:exclusiveGateway id="Gateway_Verify" name="Verification passed?">
+      <bpmn:incoming>Flow_A3</bpmn:incoming>
+      <bpmn:outgoing>Flow_VerifyYes</bpmn:outgoing>
+      <bpmn:outgoing>Flow_VerifyNo</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="Task_SendRejection" name="Send rejection to Worker">
+      <bpmn:incoming>Flow_VerifyNo</bpmn:incoming>
+      <bpmn:outgoing>Flow_EndReject</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Task_MarkComplete" name="Mark task as &#39;completed&#39; in Task Database">
+      <bpmn:incoming>Flow_VerifyYes</bpmn:incoming>
+      <bpmn:outgoing>Flow_A4</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_ReceiveMarkAck" name="Receive completion ack">
+      <bpmn:incoming>Flow_A4</bpmn:incoming>
+      <bpmn:outgoing>Flow_A5</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_A3" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sendTask id="Task_ClearAssignment" name="Update Worker state to &#39;open&#39; and clear assignment in Worker Database">
+      <bpmn:incoming>Flow_A5</bpmn:incoming>
+      <bpmn:outgoing>Flow_A7</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Task_SendConfirmation" name="Send completion confirmation to Worker">
+      <bpmn:incoming>Flow_A7</bpmn:incoming>
+      <bpmn:outgoing>Flow_EndSuccess</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:exclusiveGateway id="Gateway_APIMerge" name="">
+      <bpmn:incoming>Flow_EndSuccess</bpmn:incoming>
+      <bpmn:incoming>Flow_EndReject</bpmn:incoming>
+      <bpmn:outgoing>Flow_APIEnd</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="End_API" name="Request handled">
+      <bpmn:incoming>Flow_APIEnd</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_A1" sourceRef="Start_API" targetRef="Task_VerifyWorker" />
+    <bpmn:sequenceFlow id="Flow_A2" sourceRef="Task_VerifyWorker" targetRef="Event_ReceiveVerify" />
+    <bpmn:sequenceFlow id="Flow_A3" sourceRef="Event_ReceiveVerify" targetRef="Gateway_Verify" />
+    <bpmn:sequenceFlow id="Flow_VerifyYes" name="Yes" sourceRef="Gateway_Verify" targetRef="Task_MarkComplete" />
+    <bpmn:sequenceFlow id="Flow_VerifyNo" name="No" sourceRef="Gateway_Verify" targetRef="Task_SendRejection" />
+    <bpmn:sequenceFlow id="Flow_A4" sourceRef="Task_MarkComplete" targetRef="Event_ReceiveMarkAck" />
+    <bpmn:sequenceFlow id="Flow_A5" sourceRef="Event_ReceiveMarkAck" targetRef="Task_ClearAssignment" />
+    <bpmn:sequenceFlow id="Flow_A7" sourceRef="Task_ClearAssignment" targetRef="Task_SendConfirmation" />
+    <bpmn:sequenceFlow id="Flow_EndSuccess" sourceRef="Task_SendConfirmation" targetRef="Gateway_APIMerge" />
+    <bpmn:sequenceFlow id="Flow_EndReject" sourceRef="Task_SendRejection" targetRef="Gateway_APIMerge" />
+    <bpmn:sequenceFlow id="Flow_APIEnd" sourceRef="Gateway_APIMerge" targetRef="End_API" />
+  </bpmn:process>
+  <bpmn:process id="Process_WorkerDB" isExecutable="false">
+    <bpmn:startEvent id="Start_WDB" name="Receive verification request">
+      <bpmn:outgoing>Flow_WDB1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_WDB1" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_CheckStateAndMatch" name="Check Worker state is &#39;assigned&#39; and Task ID matches">
+      <bpmn:incoming>Flow_WDB1</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_ReturnVerification" name="Return verification result">
+      <bpmn:incoming>Flow_WDB2</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB3</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_ClearAssignment" name="Receive clear assignment request">
+      <bpmn:incoming>Flow_WDB3</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB4</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_WDB2" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_ClearAndSetOpen" name="Clear current assignment; set state to &#39;open&#39;">
+      <bpmn:incoming>Flow_WDB4</bpmn:incoming>
+      <bpmn:outgoing>Flow_WDB5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_WDB" name="Worker state updated">
+      <bpmn:incoming>Flow_WDB5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_WDB1" sourceRef="Start_WDB" targetRef="Task_CheckStateAndMatch" />
+    <bpmn:sequenceFlow id="Flow_WDB2" sourceRef="Task_CheckStateAndMatch" targetRef="Task_ReturnVerification" />
+    <bpmn:sequenceFlow id="Flow_WDB3" sourceRef="Task_ReturnVerification" targetRef="Event_ClearAssignment" />
+    <bpmn:sequenceFlow id="Flow_WDB4" sourceRef="Event_ClearAssignment" targetRef="Task_ClearAndSetOpen" />
+    <bpmn:sequenceFlow id="Flow_WDB5" sourceRef="Task_ClearAndSetOpen" targetRef="End_WDB" />
+  </bpmn:process>
+  <bpmn:process id="Process_TaskDB" isExecutable="false">
+    <bpmn:sequenceFlow id="Flow_TDB_P3" sourceRef="Task_TDB_ReturnPollData" targetRef="End_TDB_Poll" />
+    <bpmn:sequenceFlow id="Flow_TDB_P2" sourceRef="Task_TDB_ExecutePoll" targetRef="Task_TDB_ReturnPollData" />
+    <bpmn:sequenceFlow id="Flow_TDB_P1" sourceRef="Event_TDB_ReceivePoll" targetRef="Task_TDB_ExecutePoll" />
+    <bpmn:endEvent id="End_TDB_Poll" name="Poll complete">
+      <bpmn:incoming>Flow_TDB_P3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sendTask id="Task_TDB_ReturnPollData" name="Return completion data">
+      <bpmn:incoming>Flow_TDB_P2</bpmn:incoming>
+      <bpmn:outgoing>Flow_TDB_P3</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:serviceTask id="Task_TDB_ExecutePoll" name="Query for unprocessed completion data">
+      <bpmn:incoming>Flow_TDB_P1</bpmn:incoming>
+      <bpmn:outgoing>Flow_TDB_P2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:startEvent id="Event_TDB_ReceivePoll" name="Receive poll request">
+      <bpmn:outgoing>Flow_TDB_P1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_TDB_Poll" />
+    </bpmn:startEvent>
+    <bpmn:startEvent id="Start_TDB" name="Receive mark complete request">
+      <bpmn:outgoing>Flow_TDB1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_TDB1" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_SetCompleted" name="Set task status to &#39;completed&#39;">
+      <bpmn:incoming>Flow_TDB1</bpmn:incoming>
+      <bpmn:outgoing>Flow_TDB2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_AckCompletion" name="Send completion acknowledgment">
+      <bpmn:incoming>Flow_TDB2</bpmn:incoming>
+      <bpmn:outgoing>Flow_TDB3</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_TDB" name="Task marked complete">
+      <bpmn:incoming>Flow_TDB3</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_TDB1" sourceRef="Start_TDB" targetRef="Task_SetCompleted" />
+    <bpmn:sequenceFlow id="Flow_TDB2" sourceRef="Task_SetCompleted" targetRef="Task_AckCompletion" />
+    <bpmn:sequenceFlow id="Flow_TDB3" sourceRef="Task_AckCompletion" targetRef="End_TDB" />
+  </bpmn:process>
+  <bpmn:process id="Process_DepGraph" isExecutable="false">
+    <bpmn:startEvent id="Start_DG" name="Receive completion notification">
+      <bpmn:outgoing>Flow_DG1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_DG1" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_UpdateDepGraph" name="Mark task as completed in graph; unblock dependent tasks">
+      <bpmn:incoming>Flow_DG1</bpmn:incoming>
+      <bpmn:outgoing>Flow_DG2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_DG" name="Dependencies updated">
+      <bpmn:incoming>Flow_DG2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_DG1" sourceRef="Start_DG" targetRef="Task_UpdateDepGraph" />
+    <bpmn:sequenceFlow id="Flow_DG2" sourceRef="Task_UpdateDepGraph" targetRef="End_DG" />
+  </bpmn:process>
+  <bpmn:process id="Process_DepHandler" isExecutable="false">
+    <bpmn:startEvent id="Start_DH" name="Polling cycle begins">
+      <bpmn:outgoing>Flow_DH1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sendTask id="Task_DH_PollTaskDB" name="Poll Task Database for unprocessed completion updates">
+      <bpmn:incoming>Flow_DH1</bpmn:incoming>
+      <bpmn:incoming>Flow_DH_Loop</bpmn:incoming>
+      <bpmn:outgoing>Flow_DH2</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:intermediateCatchEvent id="Event_DH_ReceivePollResult" name="Receive completion data">
+      <bpmn:incoming>Flow_DH2</bpmn:incoming>
+      <bpmn:outgoing>Flow_DH3</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_DH1" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:exclusiveGateway id="Gateway_DH_HasUpdates" name="New completions found?">
+      <bpmn:incoming>Flow_DH3</bpmn:incoming>
+      <bpmn:outgoing>Flow_DH_Yes</bpmn:outgoing>
+      <bpmn:outgoing>Flow_DH_No</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="Task_DH_WriteDepUpdates" name="Notify Task Dependency Graph of completions">
+      <bpmn:incoming>Flow_DH_Yes</bpmn:incoming>
+      <bpmn:outgoing>Flow_DH4</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:exclusiveGateway id="Gateway_DH_Merge" name="">
+      <bpmn:incoming>Flow_DH4</bpmn:incoming>
+      <bpmn:incoming>Flow_DH_No</bpmn:incoming>
+      <bpmn:outgoing>Flow_DH5</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateCatchEvent id="Event_DH_PollWait" name="Wait for next polling interval">
+      <bpmn:incoming>Flow_DH5</bpmn:incoming>
+      <bpmn:outgoing>Flow_DH_Loop</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerDef_DH" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="Flow_DH1" sourceRef="Start_DH" targetRef="Task_DH_PollTaskDB" />
+    <bpmn:sequenceFlow id="Flow_DH2" sourceRef="Task_DH_PollTaskDB" targetRef="Event_DH_ReceivePollResult" />
+    <bpmn:sequenceFlow id="Flow_DH3" sourceRef="Event_DH_ReceivePollResult" targetRef="Gateway_DH_HasUpdates" />
+    <bpmn:sequenceFlow id="Flow_DH_Yes" name="Yes" sourceRef="Gateway_DH_HasUpdates" targetRef="Task_DH_WriteDepUpdates" />
+    <bpmn:sequenceFlow id="Flow_DH_No" name="No" sourceRef="Gateway_DH_HasUpdates" targetRef="Gateway_DH_Merge" />
+    <bpmn:sequenceFlow id="Flow_DH4" sourceRef="Task_DH_WriteDepUpdates" targetRef="Gateway_DH_Merge" />
+    <bpmn:sequenceFlow id="Flow_DH5" sourceRef="Gateway_DH_Merge" targetRef="Event_DH_PollWait" />
+    <bpmn:sequenceFlow id="Flow_DH_Loop" sourceRef="Event_DH_PollWait" targetRef="Task_DH_PollTaskDB" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_WF3">
+    <bpmndi:BPMNPlane id="BPMNPlane_WF3" bpmnElement="Collaboration_WF3">
+      <bpmndi:BPMNShape id="SP_W" bpmnElement="Participant_Worker" isHorizontal="true">
+        <dc:Bounds x="160" y="60" width="1400" height="180" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_SW" bpmnElement="Start_Worker">
+        <dc:Bounds x="222" y="132" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_RC" bpmnElement="Task_RequestCompletion">
+        <dc:Bounds x="310" y="110" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_GW" bpmnElement="Gateway_WorkerWait">
+        <dc:Bounds x="455" y="125" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EC" bpmnElement="Event_WorkerConfirm">
+        <dc:Bounds x="552" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_ER" bpmnElement="Event_WorkerRejection">
+        <dc:Bounds x="552" y="172" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_ES" bpmnElement="End_Worker_Success">
+        <dc:Bounds x="632" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EF" bpmnElement="End_Worker_Fail">
+        <dc:Bounds x="632" y="172" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="EW1" bpmnElement="Flow_W1">
+        <di:waypoint x="258" y="150" />
+        <di:waypoint x="310" y="150" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EW2" bpmnElement="Flow_W2">
+        <di:waypoint x="410" y="150" />
+        <di:waypoint x="455" y="150" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EW3a" bpmnElement="Flow_W3a">
+        <di:waypoint x="505" y="150" />
+        <di:waypoint x="530" y="150" />
+        <di:waypoint x="530" y="120" />
+        <di:waypoint x="552" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EW3b" bpmnElement="Flow_W3b">
+        <di:waypoint x="480" y="175" />
+        <di:waypoint x="480" y="190" />
+        <di:waypoint x="552" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EW4a" bpmnElement="Flow_W4a">
+        <di:waypoint x="588" y="120" />
+        <di:waypoint x="632" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EW4b" bpmnElement="Flow_W4b">
+        <di:waypoint x="588" y="190" />
+        <di:waypoint x="632" y="190" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_A" bpmnElement="Participant_WorkerAPI" isHorizontal="true">
+        <dc:Bounds x="160" y="290" width="1400" height="250" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA1" bpmnElement="Start_API">
+        <dc:Bounds x="222" y="392" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA2" bpmnElement="Task_VerifyWorker">
+        <dc:Bounds x="300" y="370" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA3" bpmnElement="Event_ReceiveVerify">
+        <dc:Bounds x="442" y="392" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA4" bpmnElement="Gateway_Verify" isMarkerVisible="true">
+        <dc:Bounds x="515" y="385" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA5" bpmnElement="Task_SendRejection">
+        <dc:Bounds x="600" y="310" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA6" bpmnElement="Task_MarkComplete">
+        <dc:Bounds x="600" y="440" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA7" bpmnElement="Event_ReceiveMarkAck">
+        <dc:Bounds x="742" y="462" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA9" bpmnElement="Task_ClearAssignment">
+        <dc:Bounds x="960" y="440" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA10" bpmnElement="Task_SendConfirmation">
+        <dc:Bounds x="1100" y="440" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA11" bpmnElement="Gateway_APIMerge" isMarkerVisible="true">
+        <dc:Bounds x="1275" y="385" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SA12" bpmnElement="End_API">
+        <dc:Bounds x="1372" y="392" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="EA1" bpmnElement="Flow_A1">
+        <di:waypoint x="258" y="410" />
+        <di:waypoint x="300" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA2" bpmnElement="Flow_A2">
+        <di:waypoint x="400" y="410" />
+        <di:waypoint x="442" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA3" bpmnElement="Flow_A3">
+        <di:waypoint x="478" y="410" />
+        <di:waypoint x="515" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA4" bpmnElement="Flow_VerifyYes">
+        <di:waypoint x="540" y="435" />
+        <di:waypoint x="540" y="480" />
+        <di:waypoint x="600" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA5" bpmnElement="Flow_VerifyNo">
+        <di:waypoint x="540" y="385" />
+        <di:waypoint x="540" y="350" />
+        <di:waypoint x="600" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA6" bpmnElement="Flow_A4">
+        <di:waypoint x="700" y="480" />
+        <di:waypoint x="742" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA7" bpmnElement="Flow_A5">
+        <di:waypoint x="778" y="480" />
+        <di:waypoint x="960" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA9" bpmnElement="Flow_A7">
+        <di:waypoint x="1060" y="480" />
+        <di:waypoint x="1100" y="480" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA10" bpmnElement="Flow_EndSuccess">
+        <di:waypoint x="1200" y="480" />
+        <di:waypoint x="1300" y="480" />
+        <di:waypoint x="1300" y="435" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA11" bpmnElement="Flow_EndReject">
+        <di:waypoint x="700" y="350" />
+        <di:waypoint x="1300" y="350" />
+        <di:waypoint x="1300" y="385" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EA12" bpmnElement="Flow_APIEnd">
+        <di:waypoint x="1325" y="410" />
+        <di:waypoint x="1372" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_WDB" bpmnElement="Participant_WorkerDB" isHorizontal="true">
+        <dc:Bounds x="160" y="590" width="1400" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB1" bpmnElement="Start_WDB">
+        <dc:Bounds x="332" y="652" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB2" bpmnElement="Task_CheckStateAndMatch">
+        <dc:Bounds x="410" y="630" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB3" bpmnElement="Task_ReturnVerification">
+        <dc:Bounds x="550" y="630" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB4" bpmnElement="Event_ClearAssignment">
+        <dc:Bounds x="992" y="652" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB5" bpmnElement="Task_ClearAndSetOpen">
+        <dc:Bounds x="1070" y="630" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SWDB6" bpmnElement="End_WDB">
+        <dc:Bounds x="1212" y="652" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="EWDB1" bpmnElement="Flow_WDB1">
+        <di:waypoint x="368" y="670" />
+        <di:waypoint x="410" y="670" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB2" bpmnElement="Flow_WDB2">
+        <di:waypoint x="510" y="670" />
+        <di:waypoint x="550" y="670" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB3" bpmnElement="Flow_WDB3">
+        <di:waypoint x="650" y="670" />
+        <di:waypoint x="992" y="670" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB4" bpmnElement="Flow_WDB4">
+        <di:waypoint x="1028" y="670" />
+        <di:waypoint x="1070" y="670" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EWDB5" bpmnElement="Flow_WDB5">
+        <di:waypoint x="1170" y="670" />
+        <di:waypoint x="1212" y="670" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_TDB" bpmnElement="Participant_TaskDB" isHorizontal="true">
+        <dc:Bounds x="160" y="800" width="1400" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB_P1" bpmnElement="Event_TDB_ReceivePoll">
+        <dc:Bounds x="222" y="860" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="210" y="896" width="60" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB_P2" bpmnElement="Task_TDB_ExecutePoll">
+        <dc:Bounds x="300" y="838" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB_P3" bpmnElement="Task_TDB_ReturnPollData">
+        <dc:Bounds x="440" y="838" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB_P4" bpmnElement="End_TDB_Poll">
+        <dc:Bounds x="582" y="860" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="567" y="896" width="67" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB1" bpmnElement="Start_TDB">
+        <dc:Bounds x="684" y="852" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="659" y="888" width="86" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB2" bpmnElement="Task_SetCompleted">
+        <dc:Bounds x="762" y="830" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB3" bpmnElement="Task_AckCompletion">
+        <dc:Bounds x="902" y="830" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="STDB4" bpmnElement="End_TDB">
+        <dc:Bounds x="1044" y="852" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1031" y="888" width="63" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="ETDB_P1" bpmnElement="Flow_TDB_P1">
+        <di:waypoint x="258" y="878" />
+        <di:waypoint x="300" y="878" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETDB_P2" bpmnElement="Flow_TDB_P2">
+        <di:waypoint x="400" y="878" />
+        <di:waypoint x="440" y="878" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETDB_P3" bpmnElement="Flow_TDB_P3">
+        <di:waypoint x="540" y="878" />
+        <di:waypoint x="582" y="878" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETDB1" bpmnElement="Flow_TDB1">
+        <di:waypoint x="720" y="870" />
+        <di:waypoint x="762" y="870" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETDB2" bpmnElement="Flow_TDB2">
+        <di:waypoint x="862" y="870" />
+        <di:waypoint x="902" y="870" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ETDB3" bpmnElement="Flow_TDB3">
+        <di:waypoint x="1002" y="870" />
+        <di:waypoint x="1044" y="870" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_DG" bpmnElement="Participant_DepGraph" isHorizontal="true">
+        <dc:Bounds x="160" y="990" width="1400" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDG1" bpmnElement="Start_DG">
+        <dc:Bounds x="852" y="1042" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDG2" bpmnElement="Task_UpdateDepGraph">
+        <dc:Bounds x="930" y="1020" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDG3" bpmnElement="End_DG">
+        <dc:Bounds x="1072" y="1042" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="EDG1" bpmnElement="Flow_DG1">
+        <di:waypoint x="888" y="1060" />
+        <di:waypoint x="930" y="1060" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDG2" bpmnElement="Flow_DG2">
+        <di:waypoint x="1030" y="1060" />
+        <di:waypoint x="1072" y="1060" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="SP_DH" bpmnElement="Participant_DepHandler" isHorizontal="true">
+        <dc:Bounds x="160" y="1180" width="1400" height="180" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDH1" bpmnElement="Start_DH">
+        <dc:Bounds x="222" y="1252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDH2" bpmnElement="Task_DH_PollTaskDB">
+        <dc:Bounds x="300" y="1230" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDH3" bpmnElement="Event_DH_ReceivePollResult">
+        <dc:Bounds x="442" y="1252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDH4" bpmnElement="Gateway_DH_HasUpdates" isMarkerVisible="true">
+        <dc:Bounds x="515" y="1245" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDH5" bpmnElement="Task_DH_WriteDepUpdates">
+        <dc:Bounds x="600" y="1290" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDH6" bpmnElement="Gateway_DH_Merge" isMarkerVisible="true">
+        <dc:Bounds x="735" y="1245" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SDH7" bpmnElement="Event_DH_PollWait">
+        <dc:Bounds x="822" y="1252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="EDH1" bpmnElement="Flow_DH1">
+        <di:waypoint x="258" y="1270" />
+        <di:waypoint x="300" y="1270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDH2" bpmnElement="Flow_DH2">
+        <di:waypoint x="400" y="1270" />
+        <di:waypoint x="442" y="1270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDH3" bpmnElement="Flow_DH3">
+        <di:waypoint x="478" y="1270" />
+        <di:waypoint x="515" y="1270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDH4" bpmnElement="Flow_DH_Yes">
+        <di:waypoint x="540" y="1295" />
+        <di:waypoint x="540" y="1330" />
+        <di:waypoint x="600" y="1330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDH5" bpmnElement="Flow_DH_No">
+        <di:waypoint x="565" y="1270" />
+        <di:waypoint x="735" y="1270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDH6" bpmnElement="Flow_DH4">
+        <di:waypoint x="700" y="1330" />
+        <di:waypoint x="760" y="1330" />
+        <di:waypoint x="760" y="1295" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDH7" bpmnElement="Flow_DH5">
+        <di:waypoint x="785" y="1270" />
+        <di:waypoint x="822" y="1270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EDH8" bpmnElement="Flow_DH_Loop">
+        <di:waypoint x="840" y="1252" />
+        <di:waypoint x="840" y="1210" />
+        <di:waypoint x="350" y="1210" />
+        <di:waypoint x="350" y="1230" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF1" bpmnElement="MF_CompletionReq">
+        <di:waypoint x="360" y="190" />
+        <di:waypoint x="240" y="392" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF2" bpmnElement="MF_VerifyState">
+        <di:waypoint x="350" y="450" />
+        <di:waypoint x="350" y="652" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF3" bpmnElement="MF_ReturnVerify">
+        <di:waypoint x="600" y="630" />
+        <di:waypoint x="460" y="428" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF4" bpmnElement="MF_MarkComplete">
+        <di:waypoint x="700" y="510" />
+        <di:waypoint x="700" y="686" />
+        <di:waypoint x="702" y="686" />
+        <di:waypoint x="702" y="852" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="685" y="758" width="65" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF5" bpmnElement="MF_MarkAck">
+        <di:waypoint x="969" y="830" />
+        <di:waypoint x="969" y="664" />
+        <di:waypoint x="752" y="664" />
+        <di:waypoint x="752" y="496" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="929" y="728" width="72" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF_DHPoll" bpmnElement="MF_DHPollDB">
+        <di:waypoint x="350" y="1230" />
+        <di:waypoint x="350" y="896" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="337" y="1083" width="56" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF_DHPollR" bpmnElement="MF_DHPollResult">
+        <di:waypoint x="452" y="918" />
+        <di:waypoint x="452" y="1254" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="416" y="1035" width="83" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF_DHNotify" bpmnElement="MF_DHNotifyDep">
+        <di:waypoint x="650" y="1290" />
+        <di:waypoint x="870" y="1078" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF7" bpmnElement="MF_ClearWorker">
+        <di:waypoint x="1010" y="520" />
+        <di:waypoint x="1010" y="652" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF8" bpmnElement="MF_Confirmation">
+        <di:waypoint x="1150" y="440" />
+        <di:waypoint x="570" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="EMF9" bpmnElement="MF_Rejection">
+        <di:waypoint x="650" y="310" />
+        <di:waypoint x="570" y="208" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
